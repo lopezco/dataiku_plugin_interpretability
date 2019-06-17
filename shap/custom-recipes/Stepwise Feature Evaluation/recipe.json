@@ -1,0 +1,284 @@
+// This file is the descriptor for the Custom code recipe Stepwise Feature Evaluation
+{
+    // Meta data for display purposes
+    "meta" : {
+        "label" : "Stepwise Feature evaluation using SHAP Importance",
+        "description" : "This recipe builds a model with some base variables and iteratively add more variables to improve preformance. The order in which the variables are added is ddetermined by the SHAP importance given by a model built with all the variables available. It currently works only on binary classification tasks\n\n",
+        "icon" : "icon-step-forward"
+    },
+
+    "kind" : "PYTHON",
+    
+	"selectableFromDataset": "main_input",
+
+    // Inputs and outputs are defined by roles. In the recipe's I/O tab, the user can associate one
+    // or more dataset to each input and output role.
+
+    // The "arity" field indicates whether the user can associate several datasets to the role ('NARY')
+    // or at most one ('UNARY'). The "required" field indicates whether the user is allowed to
+    // associate no dataset with the role.
+
+    "inputRoles" : [
+        {
+            "name": "main_input",
+            "label": "Input dataset",
+            "description": "Dataset used determine the best variables for the binary classification task",
+            "arity": "UNARY",
+            "required": true,
+            "acceptsDataset": true
+        }
+    ],
+
+    "outputRoles" : [
+        {
+            "name": "main_output",
+            "label": "Metrics & Results",
+            "description": "This dataset includes the performance of the model at each iteration plus the list of variables, the model class-name and the model parameters",
+            "arity": "UNARY",
+            "required": true,
+            "acceptsDataset": true
+        }
+    ],
+
+    // The field "params" holds a list of all the params
+    // for wich the user will be prompted for values in the Settings tab of the recipe.
+
+    // The available parameter types are:
+    // STRING, INT, DOUBLE, BOOLEAN, PASSWORD, SELECT, MAP, COLUMN, COLUMNS, TEXTAREA
+
+    "params": [
+        // A 'COLUMN' parameter is a string, whose value is a column name from an input schema.
+        // To specify the input schema whose column names are used, use the "columnRole" field like below.
+        // The column names will come from the schema of the first dataset associated to that role.
+        {
+            "name": "target_variable",
+            "label": "Target variable",
+            "type": "COLUMN",
+            "columnRole":"main_input",
+            "mandatory" : true
+        },
+        {
+            "name": "use_text_base_variables_toogle",
+            "label": "Base variables",
+            "description": "Use text-box for base variables",
+            "type": "BOOLEAN",
+            "defaultValue": false,
+            "mandatory": true
+        },
+        {
+            "name": "base_variables",
+            "label": " ",
+            "description": "(can be empty)",
+            "type": "COLUMNS",
+            "columnRole":"main_input",
+            "visibilityCondition": "!model.use_text_base_variables_toogle"
+        },
+        {
+            "name": "base_variables_text",
+            "label": " ",
+            "description": "Comma-separated list of variables (can be empty)",
+            "type": "TEXTAREA",
+            "visibilityCondition": "model.use_text_base_variables_toogle"
+        },
+
+        {
+            "name": "use_text_skip_variables_toogle",
+            "label": "Variables to skip",
+            "description": "Use text-box for skip variables",
+            "type": "BOOLEAN",
+            "defaultValue": false,
+            "mandatory": true
+        },
+        {
+            "name": "skip_variables",
+            "label": " ",
+            "description": "(can be empty)",
+            "type": "COLUMNS",
+            "columnRole":"main_input",
+            "visibilityCondition": "!model.use_text_skip_variables_toogle"
+        },
+        {
+            "name": "skip_variables_text",
+            "label": " ",
+            "description": "Comma-separated list of variables (can be empty)",
+            "type": "TEXTAREA",
+            "visibilityCondition": "model.use_text_skip_variables_toogle"
+        },
+
+        // Toggle checkboxes
+        {
+            "name": "advanced_toogle",
+            "label": "Advanced options",
+            "description": "Tick to access advanced configuration options",
+            "type": "BOOLEAN",
+            "defaultValue": false,
+            "mandatory": true
+        },
+        {
+            "name": "model_params_toogle",
+            "label": "Advanced model parameters",
+            "description": "Tick to access advanced configuration options for the model",
+            "type": "BOOLEAN",
+            "defaultValue": false,
+            "mandatory": true
+        },
+        // Advanced options
+        {
+            "name" : "_advanced",
+            "label" : "Advanced Options",
+            "type" : "SEPARATOR",
+            "visibilityCondition": "model.advanced_toogle"
+        },
+        {
+            "name": "n_start_variables",
+            "label": "Num. start variables",
+            "description": "Number of variables to use for the first model",
+            "type": "INT",
+            "defaultValue" : 10,
+            "visibilityCondition": "model.advanced_toogle"
+        },
+        {
+            "name": "n_step_variables",
+            "label": "Num. step variables",
+            "description": "Number of variables added to the training set at each iteration",
+            "type": "INT",
+            "defaultValue" : 1,
+            "visibilityCondition": "model.advanced_toogle"
+        },
+        {
+            "name": "early_stop_rounds",
+            "label": "Early stop rounds",
+            "description": "How many iterations without improvement before stoping the process",
+            "type": "INT",
+            "defaultValue" : 5,
+            "visibilityCondition": "model.advanced_toogle"
+        },
+        {
+            "name": "early_stop_metric",
+            "label": "Early stop metric",
+            "description": "Metric to be used to stop the process",
+             "type" : "SELECT",
+            "selectChoices" : [
+                { "value" : "gini", "label" : "GINI"},
+                { "value" : "auc", "label" : "AUC"}
+            ],
+            "defaultValue" : 'gini',
+            "visibilityCondition": "model.advanced_toogle"
+        },
+        {
+            "name": "early_stop_min_improvement",
+            "label": "Early stop improvement",
+            "description": "Minimum metric improvement between 2 steps",
+            "type": "DOUBLE",
+            "defaultValue" : 0.001,
+            "visibilityCondition": "model.advanced_toogle"
+        },
+        
+        // Model params
+        {
+            "name" : "_model",
+            "label" : "Advanced Model Parameters (LightGBM)",
+            "type" : "SEPARATOR",
+            "visibilityCondition": "model.model_params_toogle"
+        },
+        {
+            "name": "max_boost_rounds",
+            "label": "Max bossting rounds",
+            "type": "INT",
+            "defaultValue" : 700,
+            "visibilityCondition": "model.model_params_toogle"
+        },
+        {
+            "name": "n_folds",
+            "label": "Num. folds",
+            "description": "Number of folds to estimate the cross-validated performance",
+            "type": "INT",
+            "defaultValue" : 5,
+            "visibilityCondition": "model.model_params_toogle"
+        },
+        {
+            "name": "feature_fraction",
+            "label": "Feature fraction",
+            "description": "Subsample ratio of columns when constructing each tree",
+            "type": "DOUBLE",
+            "defaultValue" : 1,
+            "visibilityCondition": "model.model_params_toogle"
+        },
+        {
+            "name": "bagging_fraction",
+            "label": "Bagging fraction",
+            "description": "Subsample ratio of the training instance",
+            "type": "DOUBLE",
+            "defaultValue" : 1,
+            "visibilityCondition": "model.model_params_toogle"
+        },
+        {
+            "name": "seed",
+            "label": "Seed",
+            "description": "Random number seed. If None, default seeds in C++ code will be used",
+            "type": "INT",
+            "defaultValue" : 0,
+            "visibilityCondition": "model.model_params_toogle"
+        },
+        {
+            "name": "num_leaves",
+            "label": "Num. leaves",
+            "description": "Maximum tree leaves for base learners",
+            "type": "INT",
+            "defaultValue" : 31,
+            "visibilityCondition": "model.model_params_toogle"
+        },
+        {
+            "name": "max_depth",
+            "label": "Max depth",
+            "description": "Maximum tree depth for base learners, -1 means no limit",
+            "type": "INT",
+            "defaultValue" : -1,
+            "visibilityCondition": "model.model_params_toogle"
+        },
+        {
+            "name": "learning_rate",
+            "label": "Learning rate",
+            "description": "Boosting learning rate",
+            "type": "DOUBLE",
+            "defaultValue" : 0.1,
+            "visibilityCondition": "model.model_params_toogle"
+        },
+        {
+            "name": "n_estimators",
+            "label": "Num. estimators",
+            "description": "Number of boosted trees to fit",
+            "type": "INT",
+            "defaultValue" : 100,
+            "visibilityCondition": "model.model_params_toogle"
+        },
+        {
+            "name": "subsample_for_bin",
+            "label": "Subsample for bin",
+            "description": "Number of samples for constructing bins",
+            "type": "INT",
+            "defaultValue" : 200000,
+            "visibilityCondition": "model.model_params_toogle"
+        },
+        {
+            "name": "n_jobs",
+            "label": "Parallelism",
+            "description": "Number of parallel threads",
+            "type": "INT",
+            "defaultValue" : 4,
+            "visibilityCondition": "model.model_params_toogle"
+        }        
+               
+        
+        // The 'COLUMNS' type works in the same way, except that it is a list of strings.
+    ],
+
+    // The field "resourceKeys" holds a list of keys that allows to limit the number
+    // of concurrent executions and activities triggered by this recipe.
+    //
+    // Administrators can configure the limit per resource key in the Administration > Settings > Flow build
+    // screen.
+
+    "resourceKeys" : []
+
+}

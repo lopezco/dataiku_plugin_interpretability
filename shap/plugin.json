@@ -1,0 +1,28 @@
+// This file is the descriptor for the DSS Plugin SHAP
+{
+    "id" : "shap",
+
+    // Version. It is highly recommended to use Semantic Versioning
+    "version" : "1.0.0",
+
+
+    // Meta data for display purposes
+    "meta" : {
+        // Name of this plugin that appears in the interface.
+        "label" : "SHAP Model Explainers",
+
+        "description" : "Interpret a model using the SHAP package. It works for regression and classification models",
+        "author" : "lopezco",
+
+        // The icon of a plugin must be one of the FontAwesome 3.1 icons
+        "icon" : "icon-comments-alt",
+
+        "licenseInfo" : "Apache Software License",
+
+        // URL where the user can learn more about the plugin
+        "url" :  "http://papers.nips.cc/paper/7062-a-unified-approach-to-interpreting-model-predictions",
+
+        // List of tags for filtering the list of plugins
+        "tags" : ["shap", "dev", "model interpretability"]
+	}
+}

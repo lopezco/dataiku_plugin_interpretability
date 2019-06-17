@@ -1,0 +1,5 @@
+// This file is the descriptor for the Python Notebook Template SHAP_treeshap-notebook-predef
+{
+    "label" : "Interpretability of complex Machine Learning models",
+    "description": "Use a TreeShap explainer to get the contribution of each variable to the predictions of tree-based models.\n This explainer will work on models like LightGBM, Xgboost, RandomForest, GBM and decision trees"
+}
