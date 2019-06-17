@@ -1,6 +1,6 @@
 // This file is the descriptor for the DSS Plugin SHAP
 {
-    "id" : "shap",
+    "id" : "shap-interpreters",
 
     // Version. It is highly recommended to use Semantic Versioning
     "version" : "1.0.0",
