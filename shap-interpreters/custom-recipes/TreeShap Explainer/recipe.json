@@ -1,6 +1,4 @@
-// This file is the descriptor for the Custom code recipe TreeShap Explainer
 {
-    // Meta data for display purposes
     "meta" : {
         "label" : "TreeShap Explainer",
         "description" : "Explain a model using the TreeShap method. It works for regression and classification models",
@@ -9,114 +7,87 @@
     },
 
     "kind" : "PYTHON",
-    
+
 	"selectableFromDataset": "Dataset",
 	"selectableFromSavedModel": "Model",
 
-    // Inputs and outputs are defined by roles. In the recipe's I/O tab, the user can associate one
-    // or more dataset to each input and output role.
+  "inputRoles" : [
+      {
+          "name": "Dataset",
+          "label": "Input dataset",
+          "description": "Input dataset to explain",
+          "arity": "UNARY",
+          "required": true,
+          "acceptsDataset": true
+      },
+      {
+          "name": "Model",
+          "label": "Model",
+          "description": "Tree-based model to explain",
+          "arity": "UNARY",
+          "required": true,
+          "acceptsDataset": false,
+		      "acceptsSavedModel": true
+      }
+  ],
 
-    // The "arity" field indicates whether the user can associate several datasets to the role ('NARY')
-    // or at most one ('UNARY'). The "required" field indicates whether the user is allowed to
-    // associate no dataset with the role.
-
-    "inputRoles" : [
-        {
-            "name": "Dataset",
-            "label": "Input dataset",
-            "description": "Input dataset to explain",
-            "arity": "UNARY",
-            "required": true,
-            "acceptsDataset": true
-        },
-        {
-            "name": "Model",
-            "label": "Model",
-            "description": "Tree-based model to explain",
-            "arity": "UNARY",
-            "required": true,
-            "acceptsDataset": false,
-			"acceptsSavedModel": true
-            // ,'mustBeSQL': true
-            // ,'mustBeStrictlyType':'HDFS'
-        }
-        // ...
-    ],
-
-    "outputRoles" : [
-        {
-            "name": "Shap_values",
-            "label": "Shap values",
-            "description": "Table with SHAP values for each sample",
-            "arity": "UNARY",
-            "required": true,
-            "acceptsDataset": true
-        },
-		{
-            "name": "Shap_imp",
-            "label": "Shap global feature importance",
-            "description": "Table with SHAP importance as the average of absolute SHAP values. It also include other metrics",
-            "arity": "UNARY",
-            "required": false,
-            "acceptsDataset": true
-        }		
-        // ...
-    ],
-
-    // The field "params" holds a list of all the params
-    // for wich the user will be prompted for values in the Settings tab of the recipe.
-
-    // The available parameter types are:
-    // STRING, INT, DOUBLE, BOOLEAN, PASSWORD, SELECT, MAP, COLUMN, COLUMNS, TEXTAREA
-
-    "params": [
-        {
-            "name": "n_samples",
-			"label": "Number of samples",
-			"description":"Number of samples to explain (-1 to use all samples)",
-            "type": "INT",
-            "defaultValue" : 100,
-			"mandatory" : true
-        },
-        {
-			"name" : "copy_cols",
-			"label" : "Columns to be copied",
-			"description": "Select the column(s) that will be copied to the output dataset with SHAP values. This is useful to copy ID, dates and other variables that you want to keep track in the output dataset (If empty it will only output the SHAP values)",
-			"type" : "COLUMNS",
-			"mandatory" : false
-		},
-        {
-            "name": "advanced_toogle",
-            "label": "Advanced options",
-            "description": "Tick to access advanced configuration options",
-            "type": "BOOLEAN",
-            "defaultValue": false,
-            "mandatory": true
-        },
-        {
-            "name" : "_advanced",
-            "label" : "Advanced Options",
-            "type" : "SEPARATOR",
-            "visibilityCondition": "model.advanced_toogle"
-        },
-		{
-            "name": "model_version",
-			"label": "Model Version ID",
-			"description":"Override active version of the model. It can be found at the end of the URL of a deployed model version. Ex: 'https://(...)-Model Version ID/#summary' (Leave empty to use the 'Active' version)",
-            "type": "STRING",
-			"mandatory" : false, 
-            "visibilityCondition": "model.advanced_toogle"
-        }
-
-        // The 'COLUMNS' type works in the same way, except that it is a list of strings.
-    ],
-
-    // The field "resourceKeys" holds a list of keys that allows to limit the number
-    // of concurrent executions and activities triggered by this recipe.
-    //
-    // Administrators can configure the limit per resource key in the Administration > Settings > Flow build
-    // screen.
-
-    "resourceKeys" : []
-
+  "outputRoles" : [
+      {
+          "name": "Shap_values",
+          "label": "Shap values",
+          "description": "Table with SHAP values for each sample",
+          "arity": "UNARY",
+          "required": true,
+          "acceptsDataset": true
+      },
+	{
+          "name": "Shap_imp",
+          "label": "Shap global feature importance",
+          "description": "Table with SHAP importance as the average of absolute SHAP values. It also include other metrics",
+          "arity": "UNARY",
+          "required": false,
+          "acceptsDataset": true
+      }
+  ],
+  "params": [
+      {
+          "name": "n_samples",
+		      "label": "Number of samples",
+		      "description":"Number of samples to explain (-1 to use all samples)",
+          "type": "INT",
+          "defaultValue" : 100,
+		      "mandatory" : true
+      },
+      {
+          "name" : "copy_cols",
+          "label" : "Columns to be copied",
+          "description": "Select the column(s) that will be copied to the output dataset with SHAP values. This is useful to copy ID, dates and other variables that you want to keep track in the output dataset (If empty it will only output the SHAP values)",
+          "type" : "COLUMNS",
+          "columnRole":"Dataset",
+          "mandatory" : false
+      },
+      {
+          "name": "advanced_toogle",
+          "label": "Advanced options",
+          "description": "Tick to access advanced configuration options",
+          "type": "BOOLEAN",
+          "defaultValue": false,
+          "mandatory": true
+      },
+      {
+          "name" : "_advanced",
+          "label" : "Advanced Options",
+          "type" : "SEPARATOR",
+          "visibilityCondition": "model.advanced_toogle"
+      },
+      {
+          "name": "model_version",
+          "label": "Model Version ID",
+          "description":"Override active version of the model. It can be found at the end of the URL of a deployed model version. Ex: 'https://(...)-Model Version ID/#summary' (Leave empty to use the 'Active' version)",
+          "type": "STRING",
+          "mandatory" : false,
+          "visibilityCondition": "model.advanced_toogle"
+      }
+  ],
+  "resourceKeys" : []
 }
