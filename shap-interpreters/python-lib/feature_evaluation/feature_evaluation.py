@@ -188,7 +188,7 @@ def run(tbl_name,
 
     # Handle Labels
     label_encoder = preprocessing.LabelEncoder()
-    df_label = label_encoder.fit_transform(df_label)
+    df_label = pd.Series(label_encoder.fit_transform(df_label), name=target_variable)
 
     print("#############################################")
     print(df.columns.tolist())
