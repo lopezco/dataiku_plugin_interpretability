@@ -15,6 +15,7 @@ import numpy as np
 import lightgbm as lgb
 import matplotlib.pyplot as plt
 import shap
+from sklearn import preprocessing
 
 # -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
 ####
@@ -42,20 +43,20 @@ def density_plot(y_true, y_pred, figure=None, curve_name=''):
 def load_data(tbl_name, target_variable, base_variables=None, skip_variables=None):
     vprint('#### Load Data', include_date=True)
     dku_dataset = dataiku.Dataset(tbl_name)
-           
+
     skip_variables = skip_variables or list()
     base_variables = base_variables or list()
     all_variables = dku_dataset.get_config()['schema']['columns']
-        
+
     keep_variables = [target_variable] + base_variables
-    keep_variables += [x['name'] for x in all_variables if x['name'] not in (skip_variables + keep_variables) and x['type'] != 'date']    
-    
+    keep_variables += [x['name'] for x in all_variables if x['name'] not in (skip_variables + keep_variables) and x['type'] != 'date']
+
     if target_variable not in keep_variables:
         raise ValueError('Target variable is not in dataframe')
 
     # Read dataset
     df = dku_dataset.get_dataframe(columns=keep_variables, limit=None).select_dtypes(exclude=['datetime'])
-    
+
     # Remove_rows_with_null_target
     #df = df[~df[target_variable].isnull()]
 
@@ -65,7 +66,7 @@ def load_data(tbl_name, target_variable, base_variables=None, skip_variables=Non
 
     if len(df[target_variable].unique()) > 2:
         raise ValueError('Target variable has  more than 2 modalities. This recipe works only for binary classification tasks')
-    
+
     vprint('Input dataset shape: {}'.format(df.shape))
 
     # Separate Y from X and misc data
@@ -114,19 +115,19 @@ def compute_stepwise_cv_score(X, label, important_variable_order, n_folds=5, n_s
     n_offset_variables = 0
 
     important_variable_order = np.array(important_variable_order)
-    
+
     variables_previous = []
     result = {'gini': [], 'auc': [], 'variables_all': [], 'variables_new': [], 'n_variables': []}
     i = 0
     while i < (len(important_variable_order) - n_start_variables):
         _idx = min((n_start_variables + i * (n_step_variables + n_offset_variables), len(important_variable_order)))
         vprint('Iteration {}:\n  Using first {} variables (from {} until {})'.format(i, _idx, important_variable_order[0], important_variable_order[_idx-1]))
-        
+
         _current_variables = important_variable_order[:_idx]
         _df = X.loc[:, _current_variables]
 
         new_variables = list(set(_current_variables).difference(variables_previous))
-        
+
         _cv_res = lgb.cv(kwargs, lgb.Dataset(_df, label=label),
                          num_boost_round=max_boost_rounds, nfold=n_folds,
                          verbose_eval=50, early_stopping_rounds=40)
@@ -154,13 +155,13 @@ def compute_stepwise_cv_score(X, label, important_variable_order, n_folds=5, n_s
                 n_offset_variables += 0
         else:
             skip_count = 0
-            
+
         previous_metric = result[early_stop_metric][i]
         variables_previous = _current_variables
         print("Skip count = {}".format(skip_count))
-        
+
         i += 1
-        
+
     plt.figure()
     if show_plots: pd.DataFrame(result).set_index('n_variables')['gini'].plot(style='*-', title="GINI", grid=True);
     return result
@@ -177,13 +178,17 @@ def run(tbl_name,
         # Model parameters
         max_boost_rounds=700, n_folds=5, model_params=None,
         # Feature selection parameters
-        n_start_variables=10, n_step_variables=1, 
+        n_start_variables=10, n_step_variables=1,
         # Early stop
         early_stop_rounds=10, early_stop_metric='gini', early_stop_min_improvement=0.001):
     ####
     # Read data
     ####
     df, df_label = load_data(tbl_name, target_variable, base_variables, skip_variables)
+
+    # Handle Labels
+    label_encoder = preprocessing.LabelEncoder()
+    df_label = label_encoder.fit_transform(df_label)
 
     print("#############################################")
     print(df.columns.tolist())
@@ -201,12 +206,12 @@ def run(tbl_name,
                                                                        n_folds=n_folds,
                                                                        max_boost_rounds=max_boost_rounds,
                                                                        **model_params)
-    
+
     # Ensure that the base variables are at the top of the list
     if base_variables is not None:
         n_start_variables += len(base_variables)
         important_variable_order = base_variables + [x for x in important_variable_order if x not in base_variables]
-        
+
     ####
     # Stepwise variable scoring
     ####
