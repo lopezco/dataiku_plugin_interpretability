@@ -42,83 +42,119 @@ predictor = model.get_predictor(version_id=version_id)
 limit = None if n_samples < 0 else n_samples
 
 dku_dataset = dataiku.Dataset(dataset_name)
-df = dku_dataset.get_dataframe(limit=limit)
-
-#############################
-# Preprocess
-#############################
-# Proecess the dataset before computing interpretations
-df_processed = pd.DataFrame(predictor.preprocess(df), columns=predictor.get_features())
-
-#############################
-# Interpret
-#############################
-# Get interpreter
-tree_explainer = shap.TreeExplainer(predictor.clf)
-
-# Get shap values for each class: binary = np.array for class 1, multiclass = list of np.array for evary class
-shap_values_list = tree_explainer.shap_values(df_processed)
-
-is_regression = len(predictor.classes) == 0
-is_classification = not is_regression
-is_multiclass = is_classification and len(predictor.classes) > 2
-
-if is_classification:
-    if is_multiclass: 
-        classes_target = predictor.classes 
-    else:  # binary 
-        classes_target = [predictor.classes[1]]
-        shap_values_list = [shap_values_list]
-else: # regression
-        classes_target = [None]
-        shap_values_list = [shap_values_list]
-                                   
-# Create a dataframe for shap values of each classs and compute importance for each class if necessary
-shap_values_buffer = []
-shap_imp_buffer = []
-for idx, c in enumerate(classes_target):
-    shap_values = shap_values_list[idx]
-    
-    if df_processed.shape != shap_values.shape:
-        raise ValueError('Shap values from {} have the wrong size. Got {}, expected {}'.format(c, df_processed.shape, shap_values.shape))
-
-    df_shap_values = pd.DataFrame(shap_values, columns=predictor.get_features())
-
-    # Compute importance if second output is selected
-    if len(get_output_names_for_role('Shap_imp')):
-        # Get description of the dataframe
-        df_desc = df_shap_values.describe().transpose()
-        df_desc.index.name = 'Variable'
-
-        # Add importance as the mean(abs(shap_values))
-        tmp = df_shap_values.agg(lambda x: np.nanmean(np.absolute(x)))
-        tmp = tmp.to_frame('Importance')
-        df_shap_imp = pd.merge(df_desc, tmp, left_index=True, right_index=True).reset_index()
-        
-        if is_classification:
-            df_shap_imp['TARGET_CLASS'] = c
-            
-        shap_imp_buffer.append(df_shap_imp)
-
-    # Recipe output for shap values
-    # Add copy of variables (if any)
-    if idx_variables is not None:
-        df_shap_values = pd.merge(df[idx_variables].reset_index(drop=True), df_shap_values.reset_index(drop=True), left_index=True, right_index=True)
-
-    if is_classification:
-        df_shap_values['TARGET_CLASS'] = c
-    
-    shap_values_buffer.append(df_shap_values)
-
-# Write outputs
-df_out = pd.concat(shap_values_buffer, axis=0)
-
-if len(get_output_names_for_role('Shap_imp')):
-    df_out_imp = pd.concat(shap_imp_buffer, axis=0)
-
-    # Recipe output for importance
-    shap_imp_output = dataiku.Dataset(out_imp_name)
-    shap_imp_output.write_with_schema(df_out_imp)
-
 shap_values_output = dataiku.Dataset(out_dataset_name)
-shap_values_output.write_with_schema(df_out)
+shap_imp_output = dataiku.Dataset(out_imp_name)
+
+n_rows = 0
+
+#idx_vars = [x for x in dku_dataset.read_schema() if x['name'] in idx_variables]
+#other_vars = [{'maxLength': -1, 'name': x['name'], 'timestampNoTzAsDate': False, 'type': 'double'} for x in dku_dataset.read_schema() if x['name'] not in idx_variables]
+#shap_values_output.write_schema(idx_vars + other_vars)
+
+with shap_values_output.get_writer() as writer:
+
+    first_time = True
+    shap_sum_buffer = []
+    shap_count_buffer = None
+    for df in dku_dataset.iter_dataframes(limit=limit):
+        #############################
+        # Preprocess
+        #############################
+        # Proecess the dataset before computing interpretations
+        df_processed = pd.DataFrame(predictor.preprocess(df), columns=predictor.get_features())
+
+        #############################
+        # Interpret
+        #############################
+        # Get interpreter
+        tree_explainer = shap.TreeExplainer(predictor.clf)
+
+        # Get shap values for each class: binary = np.array for class 1, multiclass = list of np.array for evary class
+        shap_values_list = tree_explainer.shap_values(df_processed)
+
+        is_regression = len(predictor.classes) == 0
+        is_classification = not is_regression
+        is_multiclass = is_classification and len(predictor.classes) > 2
+
+        if is_classification:
+            if is_multiclass:
+                classes_target = predictor.classes
+            else:  # binary
+                classes_target = [predictor.classes[1]]
+                shap_values_list = [shap_values_list]
+        else: # regression
+            classes_target = [None]
+            shap_values_list = [shap_values_list]
+
+        # Create a dataframe for shap values of each classs and compute importance for each class if necessary
+        shap_values_buffer = []
+        for idx, c in enumerate(classes_target):
+            shap_values = shap_values_list[idx]
+
+            if df_processed.shape != shap_values.shape:
+                raise ValueError('Shap values from {} have the wrong size. Got {}, expected {}'.format(c, df_processed.shape, shap_values.shape))
+            del df_processed
+
+            df_shap_values = pd.DataFrame(shap_values, columns=predictor.get_features())
+
+            # Recipe output for shap values
+            # Add copy of variables (if any)
+            if idx_variables is not None:
+                df_shap_values = pd.merge(df[idx_variables].reset_index(drop=True), df_shap_values.reset_index(drop=True), left_index=True, right_index=True)
+            del df
+            if is_classification:
+                df_shap_values['TARGET_CLASS'] = c
+
+            shap_values_buffer.append(df_shap_values)
+
+            # Cumulate importance
+            if len(get_output_names_for_role('Shap_imp')):
+                if idx_variables is not None:
+                    tmp = df_shap_values.loc[:, ~df_shap_values.columns.isin(idx_variables)]
+                else:
+                    tmp = df_shap_values
+                del df_shap_values
+                if is_classification:
+                    tmp = tmp.groupby('TARGET_CLASS').agg(lambda x: np.nansum(np.absolute(x)))
+                else:
+                    tmp = tmp.agg(lambda x: np.nansum(np.absolute(x))).to_frame('importance').transpose()
+
+                tmp.index.name = 'idx'
+                tmp_nrows = tmp.reset_index().groupby('idx').count().iloc[:, 0].to_dict()
+                shap_sum_buffer.append(tmp)
+
+                # Add count
+                if shap_count_buffer is None:
+                    shap_count_buffer = tmp_nrows
+                else:
+                    for k, v in tmp_nrows.items():
+                        shap_count_buffer[k] += v
+
+        # Write outputs
+        df_out = pd.concat(shap_values_buffer, axis=0)
+        del shap_values_buffer
+        n_rows += len(df_out)
+
+        if first_time:
+            shap_values_output.write_schema_from_dataframe(df_out)
+            first_time = False
+
+        writer.write_dataframe(df_out)
+        del df_out
+
+    # Compute Importance
+    if len(get_output_names_for_role('Shap_imp')):
+        df_out_imp = (pd.concat(shap_sum_buffer, axis=0)
+                      .reset_index().groupby('idx').sum(axis=0)
+                      .stack().reset_index())
+        df_out_imp.columns = ['TARGET_CLASS', 'VARIABLE', 'IMPORTANCE'] if is_classification else ['Index', 'VARIABLE', 'IMPORTANCE']
+
+        if is_classification:
+            for c in df_out_imp['TARGET_CLASS'].unique():
+                df_out_imp.loc[df_out_imp['TARGET_CLASS'] == c, 'IMPORTANCE'] /= shap_count_buffer[c]
+        else:
+            df_out_imp = df_out_imp[['VARIABLE', 'IMPORTANCE']]
+            df_out_imp['IMPORTANCE'] /= n_rows
+
+        # Recipe output for importance
+        shap_imp_output.write_with_schema(df_out_imp)
