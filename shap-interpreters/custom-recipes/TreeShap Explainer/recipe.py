@@ -18,11 +18,12 @@ conf = get_recipe_config()
 model_version = conf.get('model_version', 'active').lower()
 n_samples = int(conf.get('n_samples', -1))
 idx_variables = conf.get('copy_cols', None)
+compute_importance = len(get_output_names_for_role('Shap_imp'))
 
 # Outputs
 out_dataset_name = get_output_names_for_role('Shap_values')[0].split('.')[1]
 
-if len(get_output_names_for_role('Shap_imp')):
+if compute_importance:
     out_imp_name = get_output_names_for_role('Shap_imp')[0].split('.')[1]
 
 #############################
@@ -76,6 +77,7 @@ with shap_values_output.get_writer() as writer:
         is_classification = not is_regression
         is_multiclass = is_classification and len(predictor.classes) > 2
 
+        # Is classification or regression?
         if is_classification:
             if is_multiclass:
                 classes_target = predictor.classes
@@ -107,20 +109,21 @@ with shap_values_output.get_writer() as writer:
 
             shap_values_buffer.append(df_shap_values)
 
-            # Cumulate importance
-            if len(get_output_names_for_role('Shap_imp')):
+            # Global Importance
+            if compute_importance:
                 if idx_variables is not None:
                     tmp = df_shap_values.loc[:, ~df_shap_values.columns.isin(idx_variables)]
                 else:
                     tmp = df_shap_values
                 del df_shap_values
                 if is_classification:
-                    tmp = tmp.groupby('TARGET_CLASS').agg(lambda x: np.nansum(np.absolute(x)))
+                    g = tmp.groupby('TARGET_CLASS')
+                    tmp = g.agg(lambda x: np.nansum(np.absolute(x)))
+                    tmp_nrows = g.count().iloc[:, 0].to_dict()
                 else:
                     tmp = tmp.agg(lambda x: np.nansum(np.absolute(x))).to_frame('importance').transpose()
 
                 tmp.index.name = 'idx'
-                tmp_nrows = tmp.reset_index().groupby('idx').count().iloc[:, 0].to_dict()
                 shap_sum_buffer.append(tmp)
 
                 # Add count
@@ -130,7 +133,7 @@ with shap_values_output.get_writer() as writer:
                     for k, v in tmp_nrows.items():
                         shap_count_buffer[k] += v
 
-        # Write outputs
+        # Write shap values output
         df_out = pd.concat(shap_values_buffer, axis=0)
         del shap_values_buffer
         n_rows += len(df_out)
@@ -142,19 +145,19 @@ with shap_values_output.get_writer() as writer:
         writer.write_dataframe(df_out)
         del df_out
 
-    # Compute Importance
-    if len(get_output_names_for_role('Shap_imp')):
-        df_out_imp = (pd.concat(shap_sum_buffer, axis=0)
-                      .reset_index().groupby('idx').sum(axis=0)
-                      .stack().reset_index())
-        df_out_imp.columns = ['TARGET_CLASS', 'VARIABLE', 'IMPORTANCE'] if is_classification else ['Index', 'VARIABLE', 'IMPORTANCE']
+# Aggregate importance
+if compute_importance:
+    df_out_imp = (pd.concat(shap_sum_buffer, axis=0)
+                  .reset_index().groupby('idx').sum(axis=0)
+                  .stack().reset_index())
+    df_out_imp.columns = ['TARGET_CLASS', 'VARIABLE', 'IMPORTANCE'] if is_classification else ['Index', 'VARIABLE', 'IMPORTANCE']
 
-        if is_classification:
-            for c in df_out_imp['TARGET_CLASS'].unique():
-                df_out_imp.loc[df_out_imp['TARGET_CLASS'] == c, 'IMPORTANCE'] /= shap_count_buffer[c]
-        else:
-            df_out_imp = df_out_imp[['VARIABLE', 'IMPORTANCE']]
-            df_out_imp['IMPORTANCE'] /= n_rows
+    if is_classification:
+        for c in df_out_imp['TARGET_CLASS'].unique():
+            df_out_imp.loc[df_out_imp['TARGET_CLASS'] == c, 'IMPORTANCE'] /= shap_count_buffer[c]
+    else:  # regression
+        df_out_imp = df_out_imp[['VARIABLE', 'IMPORTANCE']]
+        df_out_imp['IMPORTANCE'] /= n_rows
 
-        # Recipe output for importance
-        shap_imp_output.write_with_schema(df_out_imp)
+    # Recipe output for importance
+    shap_imp_output.write_with_schema(df_out_imp)
